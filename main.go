@@ -7,7 +7,132 @@ import (
 	"github.com/streadway/amqp"
 )
 
+const exchangeName string = "logs"
+const queueName string = "page"
+const routingKey string = "alert"
+
+func exchangeDeclare(c *amqp.Channel) error {
+	return c.ExchangeDeclare(exchangeName, "topic", true, false, false, false, nil)
+}
+
+func consume(conn *amqp.Connection) {
+
+	log.Println("Waiting to consume")
+
+	c, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("channel.open: %s", err)
+	}
+
+	// We declare our topology on both the publisher and consumer to ensure they
+	// are the same.  This is part of AMQP being a programmable messaging model.
+	//
+	// See the Channel.Publish example for the complimentary declare.
+	err = exchangeDeclare(c)
+	if err != nil {
+		log.Fatalf("exchange.declare: %s", err)
+	}
+
+	log.Println("Consume exchange declared")
+
+	// Establish our queue topologies that we are responsible for
+	type bind struct {
+		queue string
+		key   string
+	}
+
+	b := bind{queueName, routingKey}
+
+	durable := true
+	autoDelete := false
+	exclusive := false
+	nowait := false
+	var amqpTable amqp.Table
+	_, err = c.QueueDeclare(b.queue, durable, autoDelete, exclusive, nowait, amqpTable)
+	if err != nil {
+		log.Fatalf("queue.declare: %v", err)
+	}
+
+	exchange := exchangeName
+	err = c.QueueBind(b.queue, b.key, exchange, nowait, amqpTable)
+	if err != nil {
+		log.Fatalf("queue.bind: %v", err)
+	}
+
+	log.Println("Bound to queue")
+
+	// Set our quality of service.  Since we're sharing 3 consumers on the same
+	// channel, we want at least 3 messages in flight.
+	prefetchCount := 1
+	prefetchSize := 0
+	global := false
+	err = c.Qos(prefetchCount, prefetchSize, global)
+	if err != nil {
+		log.Fatalf("basic.qos: %v", err)
+	}
+
+	// Establish our consumers that have different responsibilities.  Our first
+	// two queues do not ack the messages on the server, so require to be acked
+	// on the client.
+
+	pages, err := c.Consume(queueName, "pager", false, false, false, false, nil)
+	if err != nil {
+		log.Fatalf("basic.consume: %v", err)
+	}
+
+	go func() {
+		for page := range pages {
+			log.Printf("Page : %v\n", page)
+			// ... this consumer is responsible for sending pages per log
+			page.Ack(false)
+		}
+	}()
+
+	// Wait until you're ready to finish, could be a signal handler here.
+	time.Sleep(10 * time.Second)
+
+	// Cancelling a consumer by name will finish the range and gracefully end the
+	// goroutine
+	err = c.Cancel("pager", false)
+	if err != nil {
+		log.Fatalf("basic.cancel: %v", err)
+	}
+
+	// deferred closing the Connection will also finish the consumer's ranges of
+	// their delivery chans.  If you need every delivery to be processed, make
+	// sure to wait for all consumers goroutines to finish before exiting your
+	// process.
+}
+
+func consumeForever(done chan bool) {
+	// Connects opens an AMQP connection from the credentials in the URL.
+	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	if err != nil {
+		log.Fatalf("connection.open: %s", err)
+	}
+	defer conn.Close()
+
+	for {
+		go consume(conn)
+
+		select {
+		case <-done:
+			return
+		case <-time.After(1 * time.Second):
+			log.Print("Waiting for done")
+		}
+	}
+}
+
 func main() {
+
+	// deal with consumption
+	done := make(chan bool)
+	go consumeForever(done)
+
+	log.Println("Waiting for consumption to start")
+	time.Sleep(1 * time.Second)
+
 	// Connects opens an AMQP connection from the credentials in the URL.
 	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
 	if err != nil {
@@ -28,7 +153,7 @@ func main() {
 	// are the same.  This is part of AMQP being a programmable messaging model.
 	//
 	// See the Channel.Consume example for the complimentary declare.
-	err = c.ExchangeDeclare("logs", "topic", true, false, false, false, nil)
+	err = exchangeDeclare(c)
 	if err != nil {
 		log.Fatalf("exchange.declare: %v", err)
 	}
@@ -44,7 +169,9 @@ func main() {
 
 	// This is not a mandatory delivery, so it will be dropped if there are no
 	// queues bound to the logs exchange.
-	err = c.Publish("logs", "info", false, false, msg)
+	mandatory := false
+	immediate := false
+	err = c.Publish(exchangeName, routingKey, mandatory, immediate, msg)
 	if err != nil {
 		// Since publish is asynchronous this can happen if the network connection
 		// is reset or if the server has run out of resources.
@@ -52,4 +179,10 @@ func main() {
 	}
 
 	log.Println("Success")
+
+	time.Sleep(4 * time.Second)
+
+	done <- true
+
+	log.Println("shutdown")
 }
