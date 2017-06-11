@@ -1,0 +1,11 @@
+version: '2'
+
+services:
+  rmq:
+    image: rabbitmq:management
+    ports:
+      - "5671:5671"
+      - "5672:5672"
+      - "15671:15671"
+      # This is the management port
+      - "15672:15672"
