@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"time"
 
+	"github.com/sscaling/rmqcat/options"
 	"github.com/streadway/amqp"
 )
 
@@ -124,7 +126,7 @@ func consumeForever(done chan bool) {
 	}
 }
 
-func main() {
+func oldmain() {
 
 	// deal with consumption
 	done := make(chan bool)
@@ -185,4 +187,66 @@ func main() {
 	done <- true
 
 	log.Println("shutdown")
+}
+
+type rmqCat struct {
+	options options.Connection
+	conn    *amqp.Connection
+}
+
+func New(opts options.Connection) *rmqCat {
+	return &rmqCat{options: opts}
+}
+
+func (rc *rmqCat) Open() error {
+	fmt.Printf("Opening connection with %#v\n", rc.options)
+
+	conn, err := amqp.Dial(rc.options.ConnectionString)
+	if err != nil {
+		log.Fatalf("connection.open: %s", err)
+	}
+
+	rc.conn = conn
+
+	return nil
+}
+
+func (rc *rmqCat) Close() {
+	if rc.conn != nil {
+		rc.conn.Close()
+	}
+}
+
+func main() {
+
+	exchange := options.Exchange{
+		Name:    exchangeName,
+		Kind:    "topic",
+		Durable: true,
+	}
+
+	queue := options.Queue{
+		Name:    queueName,
+		Durable: true,
+	}
+
+	binding := options.Binding{
+		QueueName:  queueName,
+		RoutingKey: routingKey,
+	}
+
+	opts := options.Connection{
+		Exchange:         exchange,
+		Queue:            queue,
+		Binding:          binding,
+		Name:             "test-connection",
+		ConnectionString: "amqp://guest:guest@localhost:5672/",
+	}
+
+	conn := New(opts)
+	conn.Open()
+	defer conn.Close()
+
+	fmt.Printf("Done\n")
+
 }
