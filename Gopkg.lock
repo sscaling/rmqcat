@@ -5,7 +5,7 @@
   branch = "master"
   name = "github.com/streadway/amqp"
   packages = ["."]
-  revision = "23eb59d9850310665357758b78f8993692e8dabb"
+  revision = "2cbfe40c9341ad63ba23e53013b3ddc7989d801c"
 
 [solve-meta]
   analyzer-name = "dep"
