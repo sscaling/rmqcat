@@ -10,3 +10,8 @@ type Queue struct {
 	NoWait     bool
 	Table      amqp.Table
 }
+
+func (q Queue) Declare(channel *amqp.Channel) error {
+	_, err := channel.QueueDeclare(q.Name, q.Durable, q.AutoDelete, q.Exclusive, q.NoWait, q.Table)
+	return err
+}

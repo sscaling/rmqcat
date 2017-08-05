@@ -189,29 +189,66 @@ func oldmain() {
 	log.Println("shutdown")
 }
 
-type rmqCat struct {
+//
+//type rmqSetupError struct {
+//	stage string
+//	msg   string
+//}
+//
+//func NewSetupError(stage, msg string) {
+//	return rmqSetupError{stage, msg}
+//}
+//
+//func (r rmqSetupError) Error() string {
+//	return fmt.Sprintf("%s: %s", r.stage, r.msg)
+//}
+
+type rmqLib struct {
 	options options.Connection
 	conn    *amqp.Connection
 }
 
-func New(opts options.Connection) *rmqCat {
-	return &rmqCat{options: opts}
+func New(opts options.Connection) *rmqLib {
+	return &rmqLib{options: opts}
 }
 
-func (rc *rmqCat) Open() error {
+func (rc *rmqLib) Open() error {
 	fmt.Printf("Opening connection with %#v\n", rc.options)
 
 	conn, err := amqp.Dial(rc.options.ConnectionString)
 	if err != nil {
-		log.Fatalf("connection.open: %s", err)
+		// un-recoverable
+		log.Fatalf("amqp.connection.open: %s", err)
 	}
 
 	rc.conn = conn
 
+	// Communicate everything over a channel (Socket abstraction)
+	channel, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("amqp.channel.open: %s", err)
+	}
+
+	// need to make sure we have exchanges, queues and bindings
+	err = rc.options.Exchange.Declare(channel)
+	if err != nil {
+		log.Fatalf("amqp.exchange.delcare: %s", err)
+	}
+
+	err = rc.options.Queue.Declare(channel)
+	if err != nil {
+		log.Fatalf("amqp.queue.declare: %s", err)
+	}
+
+	err = rc.options.Binding.Bind(channel, rc.options.Exchange, rc.options.Queue)
+	if err != nil {
+		log.Fatalf("amqp.binding.bind: %s", err)
+	}
+
 	return nil
 }
 
-func (rc *rmqCat) Close() {
+func (rc *rmqLib) Close() {
 	if rc.conn != nil {
 		rc.conn.Close()
 	}
@@ -231,7 +268,6 @@ func main() {
 	}
 
 	binding := options.Binding{
-		QueueName:  queueName,
 		RoutingKey: routingKey,
 	}
 
