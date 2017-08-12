@@ -244,6 +244,36 @@ func (rl *rmqLib) Close() {
 	}
 }
 
+func (rl *rmqLib) Channel() *amqp.Channel {
+	// TODO: Qos
+	channel, err := rl.conn.Channel()
+	if err != nil {
+		log.Fatalf("Cannot create channel : %v\n", err)
+	}
+
+	return channel
+}
+
+func (rl *rmqLib) Publish(payload []byte, contentType string) error {
+	channel := rl.Channel()
+	defer channel.Close()
+
+	mandatory := false
+	immedate := false
+	err := channel.Publish(
+		rl.options.Exchange.Name,
+		rl.options.Binding.RoutingKey,
+		mandatory,
+		immedate,
+		amqp.Publishing{
+			ContentType: contentType,
+			Body:        payload,
+		},
+	)
+
+	return err
+}
+
 func main() {
 
 	exchange := options.Exchange{
@@ -272,6 +302,11 @@ func main() {
 	rmq := New(opts)
 	rmq.Open()
 	defer rmq.Close()
+
+	err := rmq.Publish([]byte{'a', 'b', 'c'}, "text/plain")
+	if err != nil {
+		log.Printf("Publish error: %v\n", err)
+	}
 
 	fmt.Printf("Done\n")
 
