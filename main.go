@@ -198,10 +198,10 @@ func New(opts options.Connection) *rmqLib {
 	return &rmqLib{options: opts}
 }
 
-func (rc *rmqLib) Open() error {
-	fmt.Printf("Opening connection with %#v\n", rc.options)
+func (rl *rmqLib) Open() error {
+	fmt.Printf("Opening connection with %#v\n", rl.options)
 
-	conn, err := amqp.Dial(rc.options.ConnectionString)
+	conn, err := amqp.Dial(rl.options.ConnectionString)
 	if err != nil {
 		// un-recoverable
 		log.Fatalf("amqp.connection.open: %s", err)
@@ -220,27 +220,27 @@ func (rc *rmqLib) Open() error {
 	defer channel.Close()
 
 	// need to make sure we have exchanges, queues and bindings
-	err = rc.options.Exchange.Declare(channel)
+	err = rl.options.Exchange.Declare(channel)
 	onError("amqp.exchange.delcare", err)
 
-	err = rc.options.Queue.Declare(channel)
+	err = rl.options.Queue.Declare(channel)
 	onError("amqp.queue.declare", err)
 
-	err = rc.options.Binding.Bind(channel, rc.options.Exchange, rc.options.Queue)
+	err = rl.options.Binding.Bind(channel, rl.options.Exchange, rl.options.Queue)
 	onError("amqp.binding.bind", err)
 
 	log.Printf("Connected: %s\n", conn)
 
 	// only if everything is successful, save connection
-	rc.conn = conn
+	rl.conn = conn
 
 	return nil
 }
 
-func (rc *rmqLib) Close() {
-	log.Printf("Closing connection: %s\n", rc.conn)
-	if rc.conn != nil {
-		rc.conn.Close()
+func (rl *rmqLib) Close() {
+	log.Printf("Closing connection: %s\n", rl.conn)
+	if rl.conn != nil {
+		rl.conn.Close()
 	}
 }
 
