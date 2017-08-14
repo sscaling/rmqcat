@@ -41,7 +41,7 @@ func (rl *rmqLib) Open() error {
 
 	// need to make sure we have exchanges, queues and bindings
 	err = rl.options.Exchange.Declare(channel)
-	onError("amqp.exchange.delcare", err)
+	onError("amqp.exchange.declare", err)
 
 	err = rl.options.Queue.Declare(channel)
 	onError("amqp.queue.declare", err)
