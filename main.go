@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"time"
@@ -274,6 +275,55 @@ func (rl *rmqLib) Publish(payload []byte, contentType string) error {
 	return err
 }
 
+func (rl *rmqLib) Consume() ([]byte, error) {
+	channel := rl.Channel()
+	defer channel.Close()
+
+	// FIXME: configurable / programatic
+	prefetchCount := 1
+	prefetchSize := 0
+	global := false
+	err := channel.Qos(prefetchCount, prefetchSize, global)
+	if err != nil {
+		log.Fatalf("basic.qos: %v", err)
+	}
+
+	// FIXME: configurable / programatic
+	consumer := "Consumer-id"
+	autoAck := true
+	noLocal := false // not supported by RMQ
+	messages, err := channel.Consume(
+		rl.options.Queue.Name,
+		consumer,
+		autoAck,
+		rl.options.Queue.Exclusive,
+		noLocal,
+		rl.options.Exchange.NoWait,
+		nil,
+	)
+
+	if err != nil {
+		log.Fatalf("basic.consume: %v", err)
+	}
+
+	buff := new(bytes.Buffer)
+	go func() {
+		for m := range messages {
+			log.Printf("Message : %v\n", m)
+			buff.Write(m.Body)
+		}
+	}()
+
+	time.Sleep(2 * time.Second)
+
+	err = channel.Cancel(consumer, false)
+	if err != nil {
+		log.Fatalf("basic.cancel: %v", err)
+	}
+
+	return buff.Bytes(), nil
+}
+
 func main() {
 
 	exchange := options.Exchange{
@@ -305,9 +355,15 @@ func main() {
 
 	err := rmq.Publish([]byte{'a', 'b', 'c'}, "text/plain")
 	if err != nil {
-		log.Printf("Publish error: %v\n", err)
+		log.Fatalf("Publish error: %v\n", err)
 	}
 
-	fmt.Printf("Done\n")
+	payload, err := rmq.Consume()
+	if err != nil {
+		log.Fatalf("Consume error: %v\n", err)
+	}
 
+	fmt.Printf("Payload %s\n", payload)
+
+	fmt.Printf("Done\n")
 }
