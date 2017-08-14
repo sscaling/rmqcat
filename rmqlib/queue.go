@@ -1,4 +1,4 @@
-package options
+package rmqlib
 
 import "github.com/streadway/amqp"
 

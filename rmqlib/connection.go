@@ -1,4 +1,4 @@
-package options
+package rmqlib
 
 type Connection struct {
 	Exchange
